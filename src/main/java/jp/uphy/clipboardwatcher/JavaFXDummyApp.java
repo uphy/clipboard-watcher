@@ -33,7 +33,6 @@ public class JavaFXDummyApp extends Application {
     if (caller.startsWith("jp.uphy.clipboardwatcher") == false) {
       throw new IllegalStateException("Unexpected invocation.  Do not use this class from the out of this package.");
     }
-    System.out.println(caller);
     launch();
   }
 

@@ -45,7 +45,7 @@ public class Clipboard {
 
   public void set(DataFormat dataFormat, Object value) {
     final Map<DataFormat, Object> map = getContents();
-    map.put(dataFormat, value);
+    map.put(dataFormat, fixValue(value));
     this.clipboard.setContent(map);
   }
 
@@ -53,9 +53,20 @@ public class Clipboard {
     Map<DataFormat, Object> map = new HashMap<>();
     for (DataFormat df : getContentTypes()) {
       Object v = clipboard.getContent(df);
-      map.put(df, v);
+      if (v == null) {
+        continue;
+      }
+      map.put(df, fixValue(v));
     }
     return map;
+  }
+
+  private static Object fixValue(Object value) {
+    if (value instanceof String) {
+      // JavaFXのバグか、クリップボードに改行コードがCRLFの文字列を値として設定すると、改行が２つになる。
+      return ((String)value).replaceAll("\r\n", "\n");
+    }
+    return value;
   }
 
   public void remove(DataFormat dataFormat) {
