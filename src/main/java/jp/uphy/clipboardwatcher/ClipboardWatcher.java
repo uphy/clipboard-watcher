@@ -12,14 +12,8 @@
  */
 package jp.uphy.clipboardwatcher;
 
-import javafx.application.Platform;
-import javafx.scene.input.Clipboard;
-import javafx.scene.input.DataFormat;
-
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
-import java.util.concurrent.TimeUnit;
 
 
 /**
@@ -27,81 +21,59 @@ import java.util.concurrent.TimeUnit;
  */
 public class ClipboardWatcher {
 
-  private final DataFormat alreadyReplaced = new DataFormat(ClipboardWatcher.class.getName() + "/alreadyproceeded/" + System.currentTimeMillis());
-  private static ClipboardWatcher instance;
+  private static final ClipboardWatcher sharedInstance = new ClipboardWatcher();
 
-  public static synchronized ClipboardWatcher getInstance() {
-    if (instance == null) {
-      instance = new ClipboardWatcher(JavaFXUtilities.getSystemClipboard());
-    }
-    return instance;
+  public static ClipboardWatcher getSharedInstance() {
+    return sharedInstance;
   }
 
-  private Clipboard clipboard;
+  public static void setWatchInterval(long interval) {
+    ClipboardWatcherManager.getInstance().setWatchInterval(interval);
+  }
+
+  private boolean started = false;
   private List<ClipboardListener> listeners = new ArrayList<>();
-  private WatchThread watchThread;
-  private long watchInterval = TimeUnit.SECONDS.toMillis(1);
 
-  private ClipboardWatcher(Clipboard clipboard) {
-    this.clipboard = Objects.requireNonNull(clipboard);
-  }
-
-  public void addListener(ClipboardListener replacer) {
+  private final ClipboardListener listener = c -> {
+    if (isStarted() == false) {
+      return;
+    }
     synchronized (this.listeners) {
-      this.listeners.add(replacer);
+      listeners.forEach(l -> l.clipboardChanged(c));
+    }
+  };
+
+  public void addListener(ClipboardListener listener) {
+    synchronized (this.listeners) {
+      this.listeners.add(listener);
     }
   }
 
-  public void removeListener(ClipboardListener replacer) {
+  public void removeListener(ClipboardListener listener) {
     synchronized (this.listeners) {
-      this.listeners.remove(replacer);
+      this.listeners.remove(listener);
     }
-  }
-
-  public void setWatchInterval(final long watchInterval) {
-    this.watchInterval = watchInterval;
   }
 
   public synchronized void start() {
-    if (this.watchThread != null) {
-      stop();
+    if (isStarted()) {
+      return;
     }
-    this.watchThread = new WatchThread();
-    this.watchThread.start();
+    ClipboardWatcherManager manager = ClipboardWatcherManager.getInstance();
+    manager.addListener(this.listener);
+    this.started = true;
+  }
+
+  public boolean isStarted() {
+    return started;
   }
 
   public synchronized void stop() {
-    if (this.watchThread == null) {
+    if (isStarted() == false) {
       return;
     }
-    this.watchThread.interrupt();
-    this.watchThread = null;
-  }
-
-  class WatchThread extends Thread {
-
-    @Override
-    public void run() {
-      final jp.uphy.clipboardwatcher.Clipboard clipboardWrapper = new jp.uphy.clipboardwatcher.Clipboard(clipboard);
-      while (true) {
-        Platform.runLater(() -> {
-          final Boolean replaced = (Boolean)clipboard.getContent(alreadyReplaced);
-          if (replaced == null || replaced.booleanValue() == false) {
-            clipboardWrapper.set(alreadyReplaced, true);
-            synchronized (listeners) {
-              for (ClipboardListener replacer : listeners) {
-                replacer.clipboardChanged(clipboardWrapper);
-              }
-            }
-          }
-        });
-        try {
-          Thread.sleep(watchInterval);
-        } catch (InterruptedException e) {
-          break;
-        }
-      }
-    }
+    ClipboardWatcherManager manager = ClipboardWatcherManager.getInstance();
+    manager.removeListener(this.listener);
   }
 
 }
